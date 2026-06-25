@@ -1,5 +1,5 @@
-   0.010498333s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint: fingerprint error for nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail)/Check { test: false }/TargetInner { name: "nudge-tail", doc: true, ..: with_path("/Users/daniela/Documents/GitHub/nudge-tail/src/main.rs", Edition2018) }
-   0.010524750s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/daniela/Documents/GitHub/nudge-tail/target/debug/.fingerprint/nudge-tail-715e782b28920170/bin-nudge-tail`
+   0.058253125s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint: fingerprint error for nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail)/Check { test: false }/TargetInner { name: "nudge-tail", doc: true, ..: with_path("/Users/daniela/Documents/GitHub/nudge-tail/src/main.rs", Edition2018) }
+   0.058294666s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/daniela/Documents/GitHub/nudge-tail/target/debug/.fingerprint/nudge-tail-715e782b28920170/bin-nudge-tail`
 
 Caused by:
     No such file or directory (os error 2)
@@ -22,8 +22,8 @@ Stack backtrace:
   14: std::rt::lang_start::<()>::{closure#0}
   15: std::rt::lang_start_internal
   16: _main
-   0.032394750s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint: fingerprint error for nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail)/Check { test: true }/TargetInner { name: "nudge-tail", doc: true, ..: with_path("/Users/daniela/Documents/GitHub/nudge-tail/src/main.rs", Edition2018) }
-   0.032404166s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/daniela/Documents/GitHub/nudge-tail/target/debug/.fingerprint/nudge-tail-d24eccf455ca9253/test-bin-nudge-tail`
+   0.073823041s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint: fingerprint error for nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail)/Check { test: true }/TargetInner { name: "nudge-tail", doc: true, ..: with_path("/Users/daniela/Documents/GitHub/nudge-tail/src/main.rs", Edition2018) }
+   0.073834041s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/daniela/Documents/GitHub/nudge-tail/target/debug/.fingerprint/nudge-tail-d24eccf455ca9253/test-bin-nudge-tail`
 
 Caused by:
     No such file or directory (os error 2)
@@ -47,6 +47,6 @@ Stack backtrace:
   15: std::rt::lang_start_internal
   16: _main
     Checking nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail)
-error: could not compile `nudge-tail` (bin "nudge-tail" test) due to 7 previous errors; 2 warnings emitted
+error: could not compile `nudge-tail` (bin "nudge-tail") due to 2 previous errors; 4 warnings emitted
 warning: build failed, waiting for other jobs to finish...
-error: could not compile `nudge-tail` (bin "nudge-tail") due to 7 previous errors; 2 warnings emitted
+error: could not compile `nudge-tail` (bin "nudge-tail" test) due to 2 previous errors; 4 warnings emitted

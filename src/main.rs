@@ -14,56 +14,18 @@ struct Job {
 //Only insertion policies
 #[derive(Debug)]
 enum Policy {
-    SRPT,
-    SPT,
     FCFS,
-    PLCFS,
-    Nudge(f64, bool),
 }
 impl Policy {
     fn insertion_index(&mut self, queue: &Vec<Job>, new_job: &Job) -> usize {
         match self {
-            Policy::SRPT => {
-                let wrapped_index =
-                    queue.binary_search_by_key(&n64(new_job.rem_size), |job| n64(job.rem_size));
-                match wrapped_index {
-                    Ok(ok) => ok,
-                    Err(err) => err,
-                }
-            }
-            Policy::SPT => {
-                if queue.is_empty() {
-                    0
-                } else {
-                    let wrapped_index =
-                        queue.binary_search_by_key(&n64(new_job.rem_size), |job| n64(job.rem_size));
-                    let index = match wrapped_index {
-                        Ok(ok) => ok,
-                        Err(err) => err,
-                    };
-                    index.max(1)
-                }
-            }
             Policy::FCFS => queue.len(),
-            Policy::PLCFS => 0,
-            Policy::Nudge(threshold, mut just_swapped) => {
-                if !just_swapped {
-                    if queue.len() > 1 {
-                        let last_job = queue.last().unwrap();
-                        if last_job.rem_size > *threshold && new_job.rem_size <= *threshold {
-                            just_swapped = true;
-                            queue.len() - 1
-                        } else {
-                            queue.len()
-                        }
-                    } else {
-                        queue.len()
-                    }
-                } else {
-                    just_swapped = false;
-                    queue.len()
-                }
-            }
+        }
+    }
+
+    fn reorder(&mut self, queue: Vec<Job>) -> Vec<Job> {
+        match self {
+            Policy::FCFS => queue,
         }
     }
 }
@@ -81,10 +43,10 @@ fn simulate(
     num_jobs: usize,
     seed: u64,
 ) -> Results {
-    assert!((dist.mean() - 1.0).abs() < EPSILON);
+    assert!((dist.mean() - 1.0).abs() < EPSILON); // mean = lambda is like the load, so if the mean is around 1 its accurate. if not, its not accurate
     let mut rng = StdRng::seed_from_u64(seed);
-    let mut time = 0.0;
-    let arrival_dist = Exp::new(lambda).unwrap();
+    let mut time = 0.0; // easy way to track response time
+    let arrival_dist = Exp::new(lambda).unwrap(); 
     let mut next_arrival = rng.sample(arrival_dist);
     let mut num_completions = 0;
     let mut queue: Vec<Job> = vec![];
@@ -103,6 +65,7 @@ fn simulate(
             if job.rem_size <= EPSILON {
                 let job = queue.remove(0);
                 let response = time - job.arrival_time;
+                // this could probably all be abstracted
                 let response_index = (response / step) as usize;
                 while results.response_times.len() <= response_index {
                     results.response_times.push(0)
@@ -130,16 +93,6 @@ enum Dist {
     Uniform(f64, f64),
     Exponential(f64),
     Hyperexponential(f64, f64, f64),
-    ShiftedBoundedPareto(f64, f64, f64),
-    Beta(f64, f64, f64),
-    ChiSquared(f64),
-    InverseGaussian(f64, f64),
-    MixedUniform(f64, f64, f64),
-    HalfNormal(f64),
-    Triangle(f64, f64),
-    Erlang(u64, f64),
-    InfiniteDensity,
-    Lomax(f64, f64),
 }
 
 impl Dist {
@@ -155,64 +108,11 @@ impl Dist {
                 };
                 rng.sample(Exp::new(1.0 / mean).unwrap())
             }
-            Dist::ShiftedBoundedPareto(min, max, alpha) => {
-                let pareto = Pareto::new(*min, *alpha).unwrap();
-                loop {
-                    let sample = rng.sample(pareto);
-                    if sample <= *max {
-                        break sample - min;
-                    }
-                }
-            }
-            Dist::Beta(alpha, beta, scale) => {
-                let beta = Beta::new(*alpha, *beta).unwrap();
-                rng.sample(beta) * scale
-            }
-            Dist::ChiSquared(k) => {
-                let chi_squared = ChiSquared::new(*k).unwrap();
-                rng.sample(chi_squared)
-            }
-            Dist::InverseGaussian(mean, shape) => {
-                let inv_gaussian = InverseGaussian::new(*mean, *shape).unwrap();
-                rng.sample(inv_gaussian)
-            }
-            Dist::MixedUniform(low_upper, high_upper, prob_low) => {
-                let upper = if rng.gen::<f64>() < *prob_low {
-                    low_upper
-                } else {
-                    high_upper
-                };
-                rng.gen_range(0.0..*upper)
-            }
-            Dist::HalfNormal(var) => {
-                let normal = Normal::new(0.0, *var).unwrap();
-                rng.sample(normal).abs()
-            }
-            Dist::Triangle(low, high) => {
-                let dist_from_center = rng.gen_range(0.0..(high - low) / 2.0);
-                let low_prob = 0.5 + dist_from_center / (high - low);
-                if rng.gen::<f64>() < low_prob {
-                    (low + high) / 2.0 - dist_from_center
-                } else {
-                    (low + high) / 2.0 + dist_from_center
-                }
-            }
-            Dist::Erlang(k, mean) => {
-                let exp = Exp::new(1.0 / mean).unwrap();
-                (0..*k).map(|_| rng.sample(exp)).sum()
-            }
-            // pdf: 1/4 * |x-1|^{0.5}
-            Dist::InfiniteDensity => {
-                let sample = rng.gen_range(0.0..1.0);
-                1.0 + (2.0 * sample - 1.0f64).powi(2) * (sample - 0.5f64).signum()
-            }
-            Dist::Lomax(lambda, alpha) => {
-                rng.sample(Pareto::new(*lambda, *alpha).unwrap()) - lambda
-            }
         };
         assert!(sample >= 0.0);
         sample
     }
+
     fn mean(&self) -> f64 {
         match self {
             Dist::Uniform(low, high) => (low + high) / 2.0,
@@ -220,23 +120,6 @@ impl Dist {
             Dist::Hyperexponential(low_mean, high_mean, prob_low) => {
                 low_mean * prob_low + high_mean * (1.0 - prob_low)
             }
-            Dist::ShiftedBoundedPareto(min, max, alpha) => {
-                min.powf(*alpha) / (1.0 - (min / max).powf(*alpha))
-                    * (alpha / (alpha - 1.0))
-                    * (1.0 / min.powf(alpha - 1.0) - 1.0 / max.powf(alpha - 1.0))
-                    - min
-            }
-            Dist::Beta(alpha, beta, scale) => scale * alpha / (alpha + beta),
-            Dist::ChiSquared(k) => *k,
-            Dist::InverseGaussian(mean, _shape) => *mean,
-            Dist::MixedUniform(low_upper, high_upper, prob_low) => {
-                (low_upper * prob_low + high_upper * (1.0 - prob_low)) / 2.0
-            }
-            Dist::HalfNormal(var) => (var * 2.0 / PI).sqrt(),
-            Dist::Triangle(low, high) => (2.0 * low + high) / 3.0,
-            Dist::Erlang(k, mean) => *k as f64 * mean,
-            Dist::InfiniteDensity => 1.0,
-            Dist::Lomax(lambda, alpha) => lambda / (alpha - 1.0),
         }
     }
 }
@@ -248,11 +131,7 @@ fn main() {
     let step = 0.1;
     let dist = Dist::Hyperexponential(0.5, 3.0, 0.8);
     let policies = vec![
-        Policy::SRPT,
-        Policy::SPT,
         Policy::FCFS,
-        Policy::PLCFS,
-        Policy::Nudge(1.0, false),
     ];
     for mut policy in policies {
         let results = simulate(rho, dist, &mut policy, step, num_jobs, seed);
