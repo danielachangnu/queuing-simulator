@@ -1,51 +1,13 @@
-   0.058253125s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint: fingerprint error for nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail)/Check { test: false }/TargetInner { name: "nudge-tail", doc: true, ..: with_path("/Users/daniela/Documents/GitHub/nudge-tail/src/main.rs", Edition2018) }
-   0.058294666s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/daniela/Documents/GitHub/nudge-tail/target/debug/.fingerprint/nudge-tail-715e782b28920170/bin-nudge-tail`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: <std::backtrace::Backtrace>::create
-   1: cargo_util::paths::read_bytes
-   2: cargo_util::paths::read
-   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   4: cargo::core::compiler::fingerprint::prepare_target
-   5: cargo::core::compiler::compile
-   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   7: cargo::ops::cargo_compile::compile_ws
-   8: cargo::ops::cargo_compile::compile_with_exec
-   9: cargo::ops::cargo_compile::compile
-  10: cargo::commands::check::exec
-  11: <cargo::cli::Exec>::exec
-  12: cargo::main
-  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  14: std::rt::lang_start::<()>::{closure#0}
-  15: std::rt::lang_start_internal
-  16: _main
-   0.073823041s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint: fingerprint error for nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail)/Check { test: true }/TargetInner { name: "nudge-tail", doc: true, ..: with_path("/Users/daniela/Documents/GitHub/nudge-tail/src/main.rs", Edition2018) }
-   0.073834041s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/daniela/Documents/GitHub/nudge-tail/target/debug/.fingerprint/nudge-tail-d24eccf455ca9253/test-bin-nudge-tail`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: <std::backtrace::Backtrace>::create
-   1: cargo_util::paths::read_bytes
-   2: cargo_util::paths::read
-   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   4: cargo::core::compiler::fingerprint::prepare_target
-   5: cargo::core::compiler::compile
-   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   7: cargo::ops::cargo_compile::compile_ws
-   8: cargo::ops::cargo_compile::compile_with_exec
-   9: cargo::ops::cargo_compile::compile
-  10: cargo::commands::check::exec
-  11: <cargo::cli::Exec>::exec
-  12: cargo::main
-  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  14: std::rt::lang_start::<()>::{closure#0}
-  15: std::rt::lang_start_internal
-  16: _main
+   0.016989834s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint: stale: changed "/Users/daniela/Documents/GitHub/nudge-tail/src/main.rs"
+   0.016997209s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint:           (vs) "/Users/daniela/Documents/GitHub/nudge-tail/target/debug/.fingerprint/nudge-tail-715e782b28920170/dep-bin-nudge-tail"
+   0.017000042s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1782605177, nanos: 169324905 } < FileTime { seconds: 1782666526, nanos: 631206915 }
+   0.017155500s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint: fingerprint dirty for nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail)/Check { test: false }/TargetInner { name: "nudge-tail", doc: true, ..: with_path("/Users/daniela/Documents/GitHub/nudge-tail/src/main.rs", Edition2018) }
+   0.017163417s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/Users/daniela/Documents/GitHub/nudge-tail/target/debug/.fingerprint/nudge-tail-715e782b28920170/dep-bin-nudge-tail", reference_mtime: FileTime { seconds: 1782605177, nanos: 169324905 }, stale: "/Users/daniela/Documents/GitHub/nudge-tail/src/main.rs", stale_mtime: FileTime { seconds: 1782666526, nanos: 631206915 } }))
+   0.019150709s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint: stale: changed "/Users/daniela/Documents/GitHub/nudge-tail/src/main.rs"
+   0.019153792s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint:           (vs) "/Users/daniela/Documents/GitHub/nudge-tail/target/debug/.fingerprint/nudge-tail-d24eccf455ca9253/dep-test-bin-nudge-tail"
+   0.019155709s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1782605177, nanos: 169332989 } < FileTime { seconds: 1782666526, nanos: 631206915 }
+   0.019295459s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint: fingerprint dirty for nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail)/Check { test: true }/TargetInner { name: "nudge-tail", doc: true, ..: with_path("/Users/daniela/Documents/GitHub/nudge-tail/src/main.rs", Edition2018) }
+   0.019300334s  INFO prepare_target{force=false package_id=nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail) target="nudge-tail"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/Users/daniela/Documents/GitHub/nudge-tail/target/debug/.fingerprint/nudge-tail-d24eccf455ca9253/dep-test-bin-nudge-tail", reference_mtime: FileTime { seconds: 1782605177, nanos: 169332989 }, stale: "/Users/daniela/Documents/GitHub/nudge-tail/src/main.rs", stale_mtime: FileTime { seconds: 1782666526, nanos: 631206915 } }))
     Checking nudge-tail v0.1.0 (/Users/daniela/Documents/GitHub/nudge-tail)
 error: could not compile `nudge-tail` (bin "nudge-tail") due to 2 previous errors; 4 warnings emitted
 warning: build failed, waiting for other jobs to finish...

@@ -33,6 +33,24 @@ impl Policy {
 struct Results {
     response_times: Vec<usize>,
     step: f64,
+    total_response_time: f64,
+    total_queue_time: f64,
+    num_jobs: usize,
+    total_service_time: f64,
+}
+
+impl Results {
+    pub fn mean_response_time(&self) -> f64 {
+        self.total_response_time / (self.num_jobs as f64)
+    }
+
+    pub fn mean_queue_time(&self) -> f64 {
+        self.total_queue_time / (self.num_jobs as f64)
+    }
+
+    pub fn mean_service_time(&self) -> f64 {
+        self.total_service_time / (self.num_jobs as f64)
+    }
 }
 
 fn simulate(
@@ -45,19 +63,24 @@ fn simulate(
 ) -> Results {
     assert!((dist.mean() - 1.0).abs() < EPSILON); // mean = lambda is like the load, so if the mean is around 1 its accurate. if not, its not accurate
     let mut rng = StdRng::seed_from_u64(seed);
-    let mut time = 0.0; // easy way to track response time
+    let mut time = 0.0; // easy way to track response time 
     let arrival_dist = Exp::new(lambda).unwrap(); 
     let mut next_arrival = rng.sample(arrival_dist);
     let mut num_completions = 0;
     let mut queue: Vec<Job> = vec![];
-    let mut results = Results {
+let mut results = Results {
         step,
         response_times: vec![],
+        total_response_time: 0.0,
+        total_queue_time: 0.0,
+        num_jobs,
+        total_service_time: 0.0,
     };
+
     while num_completions < num_jobs {
         let next_event_diff =
             (next_arrival - time).min(queue.first().map_or(INFINITY, |j| j.rem_size));
-        let was_arrival = next_event_diff == (next_arrival - time);
+        let was_arrival  = next_event_diff == (next_arrival - time);
         time += next_event_diff;
         if !queue.is_empty() {
             let job = queue.first_mut().unwrap();
@@ -65,15 +88,23 @@ fn simulate(
             if job.rem_size <= EPSILON {
                 let job = queue.remove(0);
                 let response = time - job.arrival_time;
+                let service = job.original_size;
+                let wait_time = response - service;
+
+                results.total_response_time += response;
+                results.total_service_time += service;
+                results.total_queue_time += queue_wait;
+
                 // this could probably all be abstracted
                 let response_index = (response / step) as usize;
                 while results.response_times.len() <= response_index {
                     results.response_times.push(0)
-                }
+                }  
                 results.response_times[response_index] += 1;
                 num_completions += 1;
             }
         }
+
         if was_arrival {
             let size = dist.sample(&mut rng);
             let new_job = Job {
@@ -98,10 +129,10 @@ enum Dist {
 impl Dist {
     fn sample<R: Rng>(&self, rng: &mut R) -> f64 {
         let sample = match self {
-            Dist::Uniform(low, high) => rng.gen_range(*low..*high),
+            Dist::Uniform(low, high) => rng.random_range(*low..*high),
             Dist::Exponential(mean) => rng.sample(Exp::new(1.0 / mean).unwrap()),
             Dist::Hyperexponential(low_mean, high_mean, prob_low) => {
-                let mean = if rng.gen::<f64>() < *prob_low {
+                let mean = if rng.random::<f64>() < *prob_low {
                     low_mean
                 } else {
                     high_mean
@@ -126,7 +157,7 @@ impl Dist {
 
 fn main() {
     let num_jobs = 2_000_000_000;
-    let rho = 0.4;
+    let rho = 0.4; 
     let seed = 0;
     let step = 0.1;
     let dist = Dist::Hyperexponential(0.5, 3.0, 0.8);
