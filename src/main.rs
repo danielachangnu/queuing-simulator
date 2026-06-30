@@ -9,6 +9,7 @@ use std::f64::consts::PI;
 struct Job {
     rem_size: f64,
     arrival_time: f64,
+    original_size: f64,
 }
 
 //Only insertion policies
@@ -79,8 +80,8 @@ let mut results = Results {
 
     while num_completions < num_jobs {
         let next_event_diff =
-            (next_arrival - time).min(queue.first().map_or(INFINITY, |j| j.rem_size));
-        let was_arrival  = next_event_diff == (next_arrival - time);
+            (next_arrival - time).min(queue.first().map_or(INFINITY, |j| j.rem_size)); // pick whichever one will happen next, either the next arrival or the current job is finished
+        let was_arrival  = next_event_diff == (next_arrival - time); // if the next event is an arrival make sure to update the flag accordingly
         time += next_event_diff;
         if !queue.is_empty() {
             let job = queue.first_mut().unwrap();
@@ -93,7 +94,7 @@ let mut results = Results {
 
                 results.total_response_time += response;
                 results.total_service_time += service;
-                results.total_queue_time += queue_wait;
+                results.total_queue_time += wait_time;
 
                 // this could probably all be abstracted
                 let response_index = (response / step) as usize;
@@ -110,6 +111,7 @@ let mut results = Results {
             let new_job = Job {
                 rem_size: size,
                 arrival_time: time,
+                original_size: size,
             };
             next_arrival = time + arrival_dist.sample(&mut rng);
             let insertion_index = policy.insertion_index(&queue, &new_job);
