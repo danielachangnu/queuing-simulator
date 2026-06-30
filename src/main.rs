@@ -52,6 +52,10 @@ impl Results {
     pub fn mean_service_time(&self) -> f64 {
         self.total_service_time / (self.num_jobs as f64)
     }
+
+    pub fn mean_number_of_jobs(&self, lambda: f64) -> f64 { // little's law
+        lambda * self.mean_response_time() as f64
+    }
 }
 
 fn simulate(
@@ -61,6 +65,7 @@ fn simulate(
     step: f64,
     num_jobs: usize,
     seed: u64,
+    debug: bool,
 ) -> Results {
     assert!((dist.mean() - 1.0).abs() < EPSILON); // mean = lambda is like the load, so if the mean is around 1 its accurate. if not, its not accurate
     let mut rng = StdRng::seed_from_u64(seed);
@@ -69,7 +74,7 @@ fn simulate(
     let mut next_arrival = rng.sample(arrival_dist);
     let mut num_completions = 0;
     let mut queue: Vec<Job> = vec![];
-let mut results = Results {
+    let mut results = Results {
         step,
         response_times: vec![],
         total_response_time: 0.0,
@@ -78,7 +83,16 @@ let mut results = Results {
         total_service_time: 0.0,
     };
 
+    if debug {
+        println!("lambda: {lambda}");
+    }
+
     while num_completions < num_jobs {
+        if debug {
+                    println!("time: {time}");
+                    println!("next arrival time: {next_arrival}");
+                    std::io::stdin().read_line(&mut String::new()).expect("continued");
+                }
         let next_event_diff =
             (next_arrival - time).min(queue.first().map_or(INFINITY, |j| j.rem_size)); // pick whichever one will happen next, either the next arrival or the current job is finished
         let was_arrival  = next_event_diff == (next_arrival - time); // if the next event is an arrival make sure to update the flag accordingly
@@ -186,7 +200,7 @@ fn main() {
             policy,
             log_frequencies
                 .map(|f| format!("{}", f))
-                .collect::<Vec<String>>()
+                .collect::<Vec<String>>() 
                 .join(";")
         );
     }
