@@ -16,17 +16,21 @@ struct Job {
 #[derive(Debug)]
 enum Policy {
     FCFS,
+    PLCFS,
 }
 impl Policy {
-    fn insertion_index(&mut self, queue: &Vec<Job>, new_job: &Job) -> usize {
+    fn insertion_index(&self, queue: &Vec<Job>, new_job: &Job) -> usize {
         match self {
             Policy::FCFS => queue.len(),
+            Policy::PLCFS => queue.len(),
         }
     }
 
-    fn reorder(&mut self, queue: Vec<Job>) -> Vec<Job> {
+    fn reorder(&self, queue: &mut Vec<Job>) {
         match self {
-            Policy::FCFS => queue,
+            //srpt-improve-or for changes to this
+            Policy::FCFS => (),
+            Policy::PLCFS => queue.sort_by_key(|job| n64(-job.arrival_time)),
         }
     }
 }
@@ -61,7 +65,7 @@ impl Results {
 fn simulate(
     lambda: f64,
     dist: Dist,
-    policy: &mut Policy,
+    policy: Policy, // shouldn't be mutable for now
     step: f64,
     num_jobs: usize,
     seed: u64,
@@ -89,14 +93,15 @@ fn simulate(
 
     while num_completions < num_jobs {
         if debug {
-                    println!("time: {time}");
-                    println!("next arrival time: {next_arrival}");
-                    std::io::stdin().read_line(&mut String::new()).expect("continued");
-                }
+            println!("time: {time}");
+            println!("next arrival time: {next_arrival}");
+            std::io::stdin().read_line(&mut String::new()).expect("continued");
+        }
         let next_event_diff =
             (next_arrival - time).min(queue.first().map_or(INFINITY, |j| j.rem_size)); // pick whichever one will happen next, either the next arrival or the current job is finished
         let was_arrival  = next_event_diff == (next_arrival - time); // if the next event is an arrival make sure to update the flag accordingly
         time += next_event_diff;
+        policy.reorder(&mut queue);
         if !queue.is_empty() {
             let job = queue.first_mut().unwrap();
             job.rem_size -= next_event_diff;
@@ -172,16 +177,17 @@ impl Dist {
 }
 
 fn main() {
-    let num_jobs = 2_000_000_000;
+    let num_jobs = 2000000;
     let rho = 0.4; 
     let seed = 0;
     let step = 0.1;
     let dist = Dist::Hyperexponential(0.5, 3.0, 0.8);
     let policies = vec![
         Policy::FCFS,
+        Policy::PLCFS,
     ];
     for mut policy in policies {
-        let results = simulate(rho, dist, &mut policy, step, num_jobs, seed);
+        let results = simulate(rho, dist, policy, step, num_jobs, seed, false);
         assert_eq!(results.response_times.iter().sum::<usize>(), num_jobs);
         let cumulant: Vec<usize> = results
             .response_times
@@ -195,13 +201,32 @@ fn main() {
             .iter()
             .take((100.0/step) as usize)
             .map(|&freq| (freq as f64 / num_jobs as f64).log10());
-        println!(
+        /* println!(
             "{:?};{}",
             policy,
             log_frequencies
                 .map(|f| format!("{}", f))
                 .collect::<Vec<String>>() 
                 .join(";")
-        );
+        ); */
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        let result = simulate(
+    0.4,
+    Dist::Hyperexponential(0.5, 3.0, 0.8),
+    Policy::FCFS,
+    0.1,
+    2000,
+    0,
+    false);
+    
+    assert_eq!(result.total_response_time, 4593.799581194116);
     }
 }
