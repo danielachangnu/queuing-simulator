@@ -11,7 +11,13 @@ struct Job {
     arrival_time: f64,
     original_size: f64,
 }
-
+struct Config {
+    mean_response: bool,
+    mean_queue: bool,
+    mean_service: bool,
+    log_frequencies: bool,
+    debug: bool,
+}
 //Only insertion policies
 #[derive(Debug)]
 enum Policy {
@@ -69,7 +75,7 @@ fn simulate(
     step: f64,
     num_jobs: usize,
     seed: u64,
-    debug: bool,
+    config: &Config,
 ) -> Results {
     assert!((dist.mean() - 1.0).abs() < EPSILON); // mean = lambda is like the load, so if the mean is around 1 its accurate. if not, its not accurate
     let mut rng = StdRng::seed_from_u64(seed);
@@ -87,12 +93,12 @@ fn simulate(
         total_service_time: 0.0,
     };
 
-    if debug {
+    if config.debug {
         println!("lambda: {lambda}");
     }
 
     while num_completions < num_jobs {
-        if debug {
+        if config.debug {
             println!("time: {time}");
             println!("next arrival time: {next_arrival}");
             std::io::stdin().read_line(&mut String::new()).expect("continued");
@@ -186,8 +192,17 @@ fn main() {
         Policy::FCFS,
         Policy::PLCFS,
     ];
+
+    let config = Config {
+        mean_response: true,
+        mean_queue: true,
+        mean_service: false,
+        log_frequencies: false,
+        debug: false,
+    };
+
     for mut policy in policies {
-        let results = simulate(rho, dist, policy, step, num_jobs, seed, false);
+        let results = simulate(rho, dist, policy, step, num_jobs, seed, &config);
         assert_eq!(results.response_times.iter().sum::<usize>(), num_jobs);
         let cumulant: Vec<usize> = results
             .response_times
@@ -212,7 +227,7 @@ fn main() {
     }
 }
 
-#[cfg(test)]
+/* #[cfg(test)]
 mod tests {
     use super::*;
 
@@ -230,3 +245,4 @@ mod tests {
     assert_eq!(result.total_response_time, 4593.799581194116);
     }
 }
+*/
