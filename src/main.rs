@@ -12,14 +12,12 @@ struct Job {
     original_size: f64,
 }
 struct Config {
-    mean_response: bool,
-    mean_queue: bool,
-    mean_service: bool,
-    log_frequencies: bool,
+    response_time_histogram: Option<f64>,
     debug: bool,
 }
+
 //Only insertion policies
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum Policy {
     FCFS,
     PLCFS,
@@ -43,7 +41,7 @@ impl Policy {
 
 struct Results {
     response_times: Vec<usize>,
-    step: f64,
+    step: Option<f64>,
     total_response_time: f64,
     total_queue_time: f64,
     num_jobs: usize,
@@ -63,8 +61,19 @@ impl Results {
         self.total_service_time / (self.num_jobs as f64)
     }
 
-    pub fn mean_number_of_jobs(&self, lambda: f64) -> f64 { // little's law
+    pub fn mean_number_of_jobs(&self, lambda: f64) -> f64 {
+        // little's law
         lambda * self.mean_response_time() as f64
+    }
+
+    pub fn update_response_time_histogram(&mut self, response: f64) {
+        if let Some(step) = self.step {
+            let response_index = (response / step) as usize;
+            while self.response_times.len() <= response_index {
+                self.response_times.push(0)
+            }
+            self.response_times[response_index] += 1;
+        }
     }
 }
 
@@ -72,20 +81,19 @@ fn simulate(
     lambda: f64,
     dist: Dist,
     policy: Policy, // shouldn't be mutable for now
-    step: f64,
     num_jobs: usize,
     seed: u64,
     config: &Config,
 ) -> Results {
     assert!((dist.mean() - 1.0).abs() < EPSILON); // mean = lambda is like the load, so if the mean is around 1 its accurate. if not, its not accurate
     let mut rng = StdRng::seed_from_u64(seed);
-    let mut time = 0.0; // easy way to track response time 
-    let arrival_dist = Exp::new(lambda).unwrap(); 
+    let mut time = 0.0; // easy way to track response time
+    let arrival_dist = Exp::new(lambda).unwrap();
     let mut next_arrival = rng.sample(arrival_dist);
     let mut num_completions = 0;
     let mut queue: Vec<Job> = vec![];
     let mut results = Results {
-        step,
+        step: config.response_time_histogram,
         response_times: vec![],
         total_response_time: 0.0,
         total_queue_time: 0.0,
@@ -101,11 +109,13 @@ fn simulate(
         if config.debug {
             println!("time: {time}");
             println!("next arrival time: {next_arrival}");
-            std::io::stdin().read_line(&mut String::new()).expect("continued");
+            std::io::stdin()
+                .read_line(&mut String::new())
+                .expect("continued");
         }
         let next_event_diff =
             (next_arrival - time).min(queue.first().map_or(INFINITY, |j| j.rem_size)); // pick whichever one will happen next, either the next arrival or the current job is finished
-        let was_arrival  = next_event_diff == (next_arrival - time); // if the next event is an arrival make sure to update the flag accordingly
+        let was_arrival = next_event_diff == (next_arrival - time); // if the next event is an arrival make sure to update the flag accordingly
         time += next_event_diff;
         policy.reorder(&mut queue);
         if !queue.is_empty() {
@@ -121,12 +131,9 @@ fn simulate(
                 results.total_service_time += service;
                 results.total_queue_time += wait_time;
 
-                // this could probably all be abstracted
-                let response_index = (response / step) as usize;
-                while results.response_times.len() <= response_index {
-                    results.response_times.push(0)
-                }  
-                results.response_times[response_index] += 1;
+                if let Some(step) = config.response_time_histogram {
+                    results.update_response_time_histogram(response);
+                }
                 num_completions += 1;
             }
         }
@@ -183,66 +190,68 @@ impl Dist {
 }
 
 fn main() {
-    let num_jobs = 2000000;
-    let rho = 0.4; 
+    let num_jobs = 2_000_000 * 40;
+    let rho = 0.4;
     let seed = 0;
-    let step = 0.1;
     let dist = Dist::Hyperexponential(0.5, 3.0, 0.8);
-    let policies = vec![
-        Policy::FCFS,
-        Policy::PLCFS,
-    ];
+    let policies = vec![Policy::FCFS, Policy::PLCFS];
 
     let config = Config {
-        mean_response: true,
-        mean_queue: true,
-        mean_service: false,
-        log_frequencies: false,
+        response_time_histogram: Some(0.0001),
         debug: false,
     };
 
     for mut policy in policies {
-        let results = simulate(rho, dist, policy, step, num_jobs, seed, &config);
-        assert_eq!(results.response_times.iter().sum::<usize>(), num_jobs);
-        let cumulant: Vec<usize> = results
-            .response_times
-            .iter()
-            .scan(num_jobs, |state, &count| {
-                *state -= count;
-                Some(*state)
-            })
-            .collect();
-        let log_frequencies = cumulant
-            .iter()
-            .take((100.0/step) as usize)
-            .map(|&freq| (freq as f64 / num_jobs as f64).log10());
-        /* println!(
-            "{:?};{}",
-            policy,
-            log_frequencies
-                .map(|f| format!("{}", f))
-                .collect::<Vec<String>>() 
-                .join(";")
-        ); */
+        let results = simulate(rho, dist, policy, num_jobs, seed, &config);
+
+        if let Some(step) = config.response_time_histogram {
+            assert_eq!(results.response_times.iter().sum::<usize>(), num_jobs);
+            let cumulant: Vec<usize> = results
+                .response_times
+                .iter()
+                .scan(num_jobs, |state, &count| {
+                    *state -= count;
+                    Some(*state)
+                })
+                .collect();
+
+            let log_frequencies = cumulant
+                .iter()
+                .take((100.0 / step) as usize)
+                .map(|&freq| (freq as f64 / num_jobs as f64).log10());
+
+            println!(
+                "{:?};{}",
+                policy,
+                log_frequencies
+                    .map(|f| format!("{}", f))
+                    .collect::<Vec<String>>()
+                    .join(";")
+            );
+        }
     }
 }
 
-/* #[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn it_works() {
+        let config = Config {
+            response_time_histogram: None,
+            debug: false,
+        };
+
         let result = simulate(
-    0.4,
-    Dist::Hyperexponential(0.5, 3.0, 0.8),
-    Policy::FCFS,
-    0.1,
-    2000,
-    0,
-    false);
-    
-    assert_eq!(result.total_response_time, 4593.799581194116);
+            0.4,
+            Dist::Hyperexponential(0.5, 3.0, 0.8),
+            Policy::FCFS,
+            2000,
+            0,
+            &config,
+        );
+
+        assert_eq!(result.total_response_time, 4593.799581194116);
     }
 }
-*/
