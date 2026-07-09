@@ -46,24 +46,32 @@ struct Results {
     total_queue_time: f64,
     num_jobs: usize,
     total_service_time: f64,
+    mean_response_time: f64,
+    mean_queue_time: f64,
+    mean_service_time: f64,
+    mean_number_of_jobs: f64,
 }
 
 impl Results {
-    pub fn mean_response_time(&self) -> f64 {
-        self.total_response_time / (self.num_jobs as f64)
+    pub fn mean_response_time(&mut self) -> f64 {
+        self.mean_response_time = self.total_response_time / (self.num_jobs as f64);
+        self.mean_response_time
     }
 
-    pub fn mean_queue_time(&self) -> f64 {
-        self.total_queue_time / (self.num_jobs as f64)
+    pub fn mean_queue_time(&mut self) -> f64 {
+        self.mean_queue_time = self.total_queue_time / (self.num_jobs as f64);
+        self.mean_queue_time
     }
 
-    pub fn mean_service_time(&self) -> f64 {
-        self.total_service_time / (self.num_jobs as f64)
+    pub fn mean_service_time(&mut self) -> f64 {
+       self.mean_service_time = self.total_service_time / (self.num_jobs as f64);
+       self.mean_service_time
     }
 
-    pub fn mean_number_of_jobs(&self, lambda: f64) -> f64 {
+    pub fn mean_number_of_jobs(&mut self, lambda: f64) -> f64 {
         // little's law
-        lambda * self.mean_response_time() as f64
+       self.mean_number_of_jobs = lambda * self.mean_response_time() as f64;
+       self.mean_number_of_jobs
     }
 
     pub fn update_response_time_histogram(&mut self, response: f64) {
@@ -72,7 +80,7 @@ impl Results {
             while self.response_times.len() <= response_index {
                 self.response_times.push(0)
             }
-            self.response_times[response_index] += 1;
+            self.response_times[response_index] += 1;  
         }
     }
 }
@@ -99,6 +107,10 @@ fn simulate(
         total_queue_time: 0.0,
         num_jobs,
         total_service_time: 0.0,
+        mean_response_time: 0.0,
+        mean_queue_time: 0.0,
+        mean_service_time: 0.0,
+        mean_number_of_jobs: 0.0,
     };
 
     if config.debug {
@@ -194,11 +206,11 @@ fn main() {
     let rho = 0.4;
     let seed = 0;
     let dist = Dist::Hyperexponential(0.5, 3.0, 0.8);
-    let policies = vec![Policy::FCFS, Policy::PLCFS];
+    let policies = vec![Policy::FCFS, Policy::PLCFS];    
 
     let config = Config {
         response_time_histogram: Some(0.0001),
-        debug: false,
+        debug: false, 
     };
 
     for mut policy in policies {
@@ -253,5 +265,6 @@ mod tests {
         );
 
         assert_eq!(result.total_response_time, 4593.799581194116);
+        // hello what's up i don't really know rust but i'm trying my best teehee
     }
 }
