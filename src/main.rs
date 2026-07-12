@@ -64,14 +64,14 @@ impl Results {
     }
 
     pub fn mean_service_time(&mut self) -> f64 {
-       self.mean_service_time = self.total_service_time / (self.num_jobs as f64);
-       self.mean_service_time
+        self.mean_service_time = self.total_service_time / (self.num_jobs as f64);
+        self.mean_service_time
     }
 
     pub fn mean_number_of_jobs(&mut self, lambda: f64) -> f64 {
         // little's law
-       self.mean_number_of_jobs = lambda * self.mean_response_time() as f64;
-       self.mean_number_of_jobs
+        self.mean_number_of_jobs = lambda * self.mean_response_time() as f64;
+        self.mean_number_of_jobs
     }
 
     pub fn update_response_time_histogram(&mut self, response: f64) {
@@ -80,7 +80,7 @@ impl Results {
             while self.response_times.len() <= response_index {
                 self.response_times.push(0)
             }
-            self.response_times[response_index] += 1;  
+            self.response_times[response_index] += 1;
         }
     }
 }
@@ -103,7 +103,7 @@ fn simulate(
     let mut results = Results {
         step: config.response_time_histogram,
         response_times: vec![],
-        total_response_time: 0.0,
+        total_response_time: 0.0, 
         total_queue_time: 0.0,
         num_jobs,
         total_service_time: 0.0,
@@ -119,7 +119,7 @@ fn simulate(
 
     while num_completions < num_jobs {
         if config.debug {
-            println!("time: {time}");
+            println!("time: {time} ");
             println!("next arrival time: {next_arrival}");
             std::io::stdin()
                 .read_line(&mut String::new())
@@ -202,15 +202,23 @@ impl Dist {
 }
 
 fn main() {
-    let num_jobs = 2_000_000 * 40;
+    let num_jobs = 20;
     let rho = 0.4;
     let seed = 0;
     let dist = Dist::Hyperexponential(0.5, 3.0, 0.8);
-    let policies = vec![Policy::FCFS, Policy::PLCFS];    
+    let policies = vec![Policy::FCFS, Policy::PLCFS];
+    let mut inputOption = String::new();
+    std::io::stdin()
+        .read_line(&mut inputOption)
+        .expect("could not read line");
 
-    let config = Config {
-        response_time_histogram: Some(0.0001),
-        debug: false, 
+    let choice = inputOption.trim().parse().unwrap_or(0);
+
+    let config = match choice {
+        1 => Config { debug: false, response_time_histogram: Some(0.0001)},
+        2 => Config { debug: true, response_time_histogram: None },
+        3 => Config { debug: true, response_time_histogram: Some(0.0001)},
+        _ => Config { debug: false, response_time_histogram: None},
     };
 
     for mut policy in policies {
