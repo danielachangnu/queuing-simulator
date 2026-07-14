@@ -21,12 +21,24 @@ struct Config {
 enum Policy {
     FCFS,
     PLCFS,
+    LCFS,
+    SRPT,
+    PSJF,
 }
 impl Policy {
-    fn insertion_index(&self, queue: &Vec<Job>, new_job: &Job) -> usize {
+    fn insertion_index(&self, queue: &Vec<Job>, new_job: &Job) -> Option<usize> {
         match self {
-            Policy::FCFS => queue.len(),
-            Policy::PLCFS => queue.len(),
+            Policy::FCFS => Some(queue.len()),
+            Policy::PLCFS => Some(0),
+            Policy::LCFS => {
+                if queue.is_empty() {
+                    Some(0)
+                } else {
+                    Some(1)
+                }
+            }
+            Policy::SRPT => None,
+            Policy::PSJF => None,
         }
     }
 
@@ -34,7 +46,10 @@ impl Policy {
         match self {
             //srpt-improve-or for changes to this
             Policy::FCFS => (),
-            Policy::PLCFS => queue.sort_by_key(|job| n64(-job.arrival_time)),
+            Policy::PLCFS => (),
+            Policy::LCFS => (),
+            Policy::SRPT => queue.sort_by_key(|job| n64(job.rem_size)),
+            Policy::PSJF => queue.sort_by_key(|job| n64(job.original_size)),
         }
     }
 }
@@ -50,6 +65,7 @@ struct Results {
     mean_queue_time: f64,
     mean_service_time: f64,
     mean_number_of_jobs: f64,
+    total_time: f64,
 }
 
 impl Results {
@@ -103,7 +119,7 @@ fn simulate(
     let mut results = Results {
         step: config.response_time_histogram,
         response_times: vec![],
-        total_response_time: 0.0, 
+        total_response_time: 0.0,
         total_queue_time: 0.0,
         num_jobs,
         total_service_time: 0.0,
@@ -111,6 +127,7 @@ fn simulate(
         mean_queue_time: 0.0,
         mean_service_time: 0.0,
         mean_number_of_jobs: 0.0,
+        total_time: 0.0,
     };
 
     if config.debug {
@@ -129,10 +146,10 @@ fn simulate(
             (next_arrival - time).min(queue.first().map_or(INFINITY, |j| j.rem_size)); // pick whichever one will happen next, either the next arrival or the current job is finished
         let was_arrival = next_event_diff == (next_arrival - time); // if the next event is an arrival make sure to update the flag accordingly
         time += next_event_diff;
-        policy.reorder(&mut queue);
         if !queue.is_empty() {
             let job = queue.first_mut().unwrap();
             job.rem_size -= next_event_diff;
+            assert!(job.rem_size >= -EPSILON);
             if job.rem_size <= EPSILON {
                 let job = queue.remove(0);
                 let response = time - job.arrival_time;
@@ -159,9 +176,21 @@ fn simulate(
             };
             next_arrival = time + arrival_dist.sample(&mut rng);
             let insertion_index = policy.insertion_index(&queue, &new_job);
-            queue.insert(insertion_index, new_job);
+            match policy.insertion_index(&queue, &new_job) {
+                Some(index) => {
+                    queue.insert(index, new_job);
+                }
+                None => {
+                    queue.push(new_job);
+                    policy.reorder(&mut queue);
+                }
+            }
         }
     }
+
+    assert!(results.total_queue_time >= -EPSILON);
+    assert!(results.total_response_time >= results.total_service_time - EPSILON);
+    results.total_time = time;
     results
 }
 
@@ -215,13 +244,25 @@ fn main() {
     let choice = inputOption.trim().parse().unwrap_or(0);
 
     let config = match choice {
-        1 => Config { debug: false, response_time_histogram: Some(0.0001)},
-        2 => Config { debug: true, response_time_histogram: None },
-        3 => Config { debug: true, response_time_histogram: Some(0.0001)},
-        _ => Config { debug: false, response_time_histogram: None},
+        1 => Config {
+            debug: false,
+            response_time_histogram: Some(0.0001),
+        },
+        2 => Config {
+            debug: true,
+            response_time_histogram: None,
+        },
+        3 => Config {
+            debug: true,
+            response_time_histogram: Some(0.0001),
+        },
+        _ => Config {
+            debug: false,
+            response_time_histogram: None,
+        },
     };
 
-    for mut policy in policies {
+    for policy in policies {
         let results = simulate(rho, dist, policy, num_jobs, seed, &config);
 
         if let Some(step) = config.response_time_histogram {
@@ -253,26 +294,4 @@ fn main() {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let config = Config {
-            response_time_histogram: None,
-            debug: false,
-        };
-
-        let result = simulate(
-            0.4,
-            Dist::Hyperexponential(0.5, 3.0, 0.8),
-            Policy::FCFS,
-            2000,
-            0,
-            &config,
-        );
-
-        assert_eq!(result.total_response_time, 4593.799581194116);
-        // hello what's up i don't really know rust but i'm trying my best teehee
-    }
-}
+mod mean_tests;
