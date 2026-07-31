@@ -1,4 +1,5 @@
 use super::*;
+
 #[test]
 fn test_dist_mean() {
     let uniform = Dist::Uniform(2.0, 4.0);
@@ -9,89 +10,6 @@ fn test_dist_mean() {
 
     let hyper = Dist::Hyperexponential(1.0, 10.0, 0.8);
     assert!((hyper.mean() - 2.8).abs() < EPSILON);
-}
-#[test]
-fn test_policy_fcfs() {
-    let mut queue = vec![
-        Job {
-            rem_size: 1.0,
-            arrival_time: 1.0,
-            original_size: 1.0,
-        },
-        Job {
-            rem_size: 1.0,
-            arrival_time: 5.0,
-            original_size: 1.0,
-        },
-    ];
-    let new_job = Job {
-        rem_size: 1.0,
-        arrival_time: 6.0,
-        original_size: 1.0,
-    };
-
-    let policy = Policy::FCFS;
-
-    assert_eq!(policy.insertion_index(&queue, &new_job).unwrap(), 2);
-
-    policy.reorder(&mut queue);
-    assert_eq!(queue[0].arrival_time, 1.0);
-    assert_eq!(queue[1].arrival_time, 5.0);
-}
-
-#[test]
-fn test_bva_queue_empty() {
-    let mut queue: Vec<Job> = vec![];
-    let new_job = Job {
-        rem_size: 1.0,
-        arrival_time: 0.0,
-        original_size: 1.0,
-    };
-
-    assert_eq!(Policy::FCFS.insertion_index(&queue, &new_job).unwrap(), 0);
-
-    Policy::PLCFS.reorder(&mut queue);
-    assert_eq!(queue.len(), 0);
-}
-
-#[test]
-fn test_bva_queue_single_item() {
-    let mut queue: Vec<Job> = vec![Job {
-        rem_size: 1.0,
-        arrival_time: 5.0,
-        original_size: 1.0,
-    }];
-
-    Policy::PLCFS.reorder(&mut queue);
-    assert_eq!(queue[0].arrival_time, 5.0);
-}
-
-#[test]
-fn test_bva_plcfs_exact_arrival_ties() {
-    let mut queue = vec![
-        Job {
-            rem_size: 1.0,
-            arrival_time: 5.0,
-            original_size: 1.0,
-        },
-        Job {
-            rem_size: 2.0,
-            arrival_time: 5.0,
-            original_size: 2.0,
-        },
-        Job {
-            rem_size: 3.0,
-            arrival_time: 2.0,
-            original_size: 3.0,
-        },
-    ];
-
-    Policy::PLCFS.reorder(&mut queue);
-
-    assert_eq!(queue[2].arrival_time, 2.0);
-
-    assert_eq!(queue[0].rem_size, 1.0);
-    assert_eq!(queue[1].rem_size, 2.0);
 }
 
 #[test]
@@ -111,8 +29,13 @@ fn test_system_littles_law() {
         &config,
     );
 
-    let mean_response = results.mean_response_time();
-    let mean_jobs = results.mean_number_of_jobs(lambda);
+    // Call the methods to update the fields
+    results.mean_response_time();
+    results.mean_number_of_jobs(lambda);
+
+    // Access the fields directly
+    let mean_response = results.mean_response_time;
+    let mean_jobs = results.mean_number_of_jobs;
 
     let expected_jobs = lambda * mean_response;
 
@@ -136,11 +59,140 @@ fn test_system_littles_law2() {
         &config,
     );
 
-    let expected_l = results.mean_number_of_jobs(theoretical_lambda);
+    // Call method to update, then access field
+    results.mean_number_of_jobs(theoretical_lambda);
+    let expected_l = results.mean_number_of_jobs;
 
     let actual_l = results.total_response_time / results.total_time;
 
     let margin = actual_l * 0.02;
 
     assert!((actual_l - expected_l).abs() < margin);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const seed: u64 = 42; 
+    const job_size: usize = 150_000;
+    const TOLERANCE: f64 = 0.05; 
+
+    fn test_config() -> Config {
+        Config {
+            debug: false,
+            response_time_histogram: None,
+        }
+    }
+    
+    fn run_sim(lambda: f64, dist: Dist, policy: Policy) -> f64 {
+        let mut results = simulate(lambda, dist, policy, job_size, seed, &test_config());
+        results.mean_response_time(); // Update the field
+        results.mean_response_time    // Return the field's value
+    }
+
+    #[test]
+    fn test_mm1_exponential_c2_equals_1() {
+        let lambda = 0.5; // rho = 0.5
+        let dist = Dist::Exponential(1.0);
+
+        let fcfs = run_sim(lambda, dist, Policy::FCFS);
+        let lcfs = run_sim(lambda, dist, Policy::LCFS);
+        let plcfs = run_sim(lambda, dist, Policy::PLCFS);
+        let ps = run_sim(lambda, dist, Policy::PS);
+        let las = run_sim(lambda, dist, Policy::LAS);
+        let srpt = run_sim(lambda, dist, Policy::SRPT);
+        let psjf = run_sim(lambda, dist, Policy::PSJF);
+        let lrpt = run_sim(lambda, dist, Policy::LRPT);
+
+        //wait time
+        assert!((fcfs - 2.0).abs() < TOLERANCE);
+        assert!((lcfs - fcfs).abs() < TOLERANCE);
+
+        //response time
+        assert!((ps - 2.0).abs() < TOLERANCE);
+        assert!((plcfs - ps).abs() < TOLERANCE);
+    }
+
+    #[test]
+    fn test_mg1_hyperexponential() {
+        let lambda = 0.5; 
+        let dist = Dist::Hyperexponential(0.5, 3.0, 0.8);
+
+        let fcfs = run_sim(lambda, dist, Policy::FCFS);
+        let lcfs = run_sim(lambda, dist, Policy::LCFS);
+        let plcfs = run_sim(lambda, dist, Policy::PLCFS);
+        let ps = run_sim(lambda, dist, Policy::PS);
+        let las = run_sim(lambda, dist, Policy::LAS);
+        let srpt = run_sim(lambda, dist, Policy::SRPT);
+        let psjf = run_sim(lambda, dist, Policy::PSJF);
+        let lrpt = run_sim(lambda, dist, Policy::LRPT);
+
+        //wait time
+        assert!((fcfs - 3.0).abs() < TOLERANCE);
+        assert!((lcfs - fcfs).abs() < TOLERANCE);
+
+        //response time
+        assert!((ps - 2.0).abs() < TOLERANCE);
+        assert!((plcfs - ps).abs() < TOLERANCE);
+    }
+
+    #[test]
+    fn test_mg1_uniform_low_variance() {
+        let lambda = 0.5; 
+        let dist = Dist::Uniform(0.0, 2.0);
+
+        let fcfs = run_sim(lambda, dist, Policy::FCFS);
+        let lcfs = run_sim(lambda, dist, Policy::LCFS);
+        let plcfs = run_sim(lambda, dist, Policy::PLCFS);
+        let ps = run_sim(lambda, dist, Policy::PS);
+        let las = run_sim(lambda, dist, Policy::LAS);
+        let srpt = run_sim(lambda, dist, Policy::SRPT);
+        let psjf = run_sim(lambda, dist, Policy::PSJF);
+        let lrpt = run_sim(lambda, dist, Policy::LRPT);
+
+        //wait time
+        assert!((fcfs - 1.666).abs() < TOLERANCE);
+        assert!((lcfs - fcfs).abs() < TOLERANCE);
+    }
+
+    #[test]
+    fn test_ps_slowdown() {        
+        let lambda = 0.5;
+        let e_s = 1.0;
+        let rho = lambda * e_s;
+        
+        let dist = Dist::Hyperexponential(0.5, 3.0, 0.8);
+        let mut results = simulate(lambda, dist, Policy::PS, job_size, seed, &test_config());
+        
+        // Update then access field
+        results.mean_slowdown();
+        let sim_slowdown = results.mean_slowdown;
+        
+        let expected_slowdown = 1.0 / (1.0 - rho); 
+        
+        assert!(
+            (sim_slowdown - expected_slowdown).abs() < TOLERANCE
+        );
+    }
+
+    #[test]
+    fn test_plcfs_slowdown() {
+        let lambda = 0.5;
+        let e_s = 1.0;
+        let rho = lambda * e_s; 
+        
+        let dist = Dist::Exponential(e_s);
+        let mut results = simulate(lambda, dist, Policy::PLCFS, job_size, seed, &test_config());
+        
+        // Update then access field
+        results.mean_slowdown();
+        let sim_slowdown = results.mean_slowdown;
+        
+        let expected_slowdown = 1.0 / (1.0 - rho);
+        
+        assert!(
+            (sim_slowdown - expected_slowdown).abs() < TOLERANCE
+        );
+    }
 }

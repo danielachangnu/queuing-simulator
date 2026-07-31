@@ -16,7 +16,6 @@ struct Config {
     debug: bool,
 }
 
-//Only insertion policies
 #[derive(Debug, Copy, Clone)]
 enum Policy {
     FCFS,
@@ -24,32 +23,214 @@ enum Policy {
     LCFS,
     SRPT,
     PSJF,
+    PS,
+    LAS,
+    LRPT,
 }
 impl Policy {
-    fn insertion_index(&self, queue: &Vec<Job>, new_job: &Job) -> Option<usize> {
+    fn work(&self, running: &mut Vec<Job>) -> f64 {
         match self {
-            Policy::FCFS => Some(queue.len()),
-            Policy::PLCFS => Some(0),
-            Policy::LCFS => {
-                if queue.is_empty() {
-                    Some(0)
+            Policy::PS | Policy::LRPT | Policy::LAS => {
+                if running.is_empty() {
+                    0.0
                 } else {
-                    Some(1)
+                    1.0 / running.len() as f64
                 }
             }
-            Policy::SRPT => None,
-            Policy::PSJF => None,
+
+            _ => {
+                if running.is_empty() {
+                    0.0
+                } else {
+                    1.0
+                }
+            }
         }
     }
 
-    fn reorder(&self, queue: &mut Vec<Job>) {
+    fn arrival(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, new_job: Job) {
         match self {
-            //srpt-improve-or for changes to this
-            Policy::FCFS => (),
-            Policy::PLCFS => (),
-            Policy::LCFS => (),
-            Policy::SRPT => queue.sort_by_key(|job| n64(job.rem_size)),
-            Policy::PSJF => queue.sort_by_key(|job| n64(job.original_size)),
+            Policy::FCFS => {
+                if running.is_empty() {
+                    running.push(new_job);
+                } else {
+                    waiting.push(new_job);
+                }
+            }
+
+            Policy::PLCFS => {
+                if !running.is_empty() {
+                    waiting.insert(0, running.remove(0));
+                }
+                running.push(new_job);
+            }
+
+            Policy::LCFS => {
+                if running.is_empty() {
+                    running.push(new_job);
+                } else {
+                    waiting.insert(0, new_job);
+                }
+            }
+
+            Policy::SRPT => {
+                if running.is_empty() {
+                    running.push(new_job);
+                } else if new_job.rem_size < running[0].rem_size {
+                    waiting.push(running.remove(0));
+                    waiting.sort_by_key(|job| n64(job.rem_size));
+                    running.push(new_job);
+                } else {
+                    waiting.push(new_job);
+                    waiting.sort_by_key(|job| n64(job.rem_size));
+                }
+            }
+
+            Policy::PSJF => {
+                if running.is_empty() {
+                    running.push(new_job);
+                } else if new_job.original_size < running[0].original_size {
+                    waiting.push(running.remove(0));
+                    waiting.sort_by_key(|job| n64(job.original_size));
+                    running.push(new_job);
+                } else {
+                    waiting.push(new_job);
+                    waiting.sort_by_key(|job| n64(job.original_size));
+                }
+            }
+
+            Policy::PS => {
+                running.push(new_job);
+            }
+
+            Policy::LAS => {
+                if running.is_empty() {
+                    running.push(new_job);
+                } else {
+                    let current_attained = running[0].original_size - running[0].rem_size;
+                    let new_attained = 0.0;
+                    if new_attained < current_attained {
+                        waiting.append(running);
+                        running.push(new_job);
+                        waiting.sort_by_key(|job| n64(job.original_size - job.rem_size));
+                    } else {
+                        running.push(new_job);
+                    }
+                }
+            }
+
+            Policy::LRPT => {
+                if running.is_empty() {
+                    running.push(new_job);
+                } else {
+                    let current_rem = running[0].rem_size;
+                    if new_job.rem_size > current_rem {
+                        waiting.append(running);
+                        running.push(new_job);
+                        waiting.sort_by_key(|job| -n64(job.rem_size));
+                    } else if new_job.rem_size == current_rem {
+                        running.push(new_job);
+                    } else {
+                        waiting.push(new_job);
+                        waiting.sort_by_key(|job| -n64(job.rem_size));
+                    }
+                }
+            }
+        }
+    }
+
+    fn completion(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>) {
+        match self {
+            Policy::PS => (),
+            Policy::LAS => {
+                if running.is_empty() && !waiting.is_empty() {
+                    let first = waiting.remove(0);
+                    let target_attained = first.original_size - first.rem_size;
+                    running.push(first);
+
+                    while !waiting.is_empty() {
+                        let next_attained = waiting[0].original_size - waiting[0].rem_size;
+                        if (next_attained - target_attained).abs() <= EPSILON {
+                            running.push(waiting.remove(0));
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            Policy::LRPT => {
+                if running.is_empty() && !waiting.is_empty() {
+                    let first = waiting.remove(0);
+                    let target_rem = first.rem_size;
+                    running.push(first);
+
+                    while !waiting.is_empty() {
+                        if (waiting[0].rem_size - target_rem).abs() <= EPSILON {
+                            running.push(waiting.remove(0));
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            _ => {
+                if !waiting.is_empty() {
+                    running.push(waiting.remove(0));
+                }
+            }
+        }
+    }
+
+    fn time_to_preemption(&self, waiting: &[Job], running: &[Job], work_rate: f64) -> f64 {
+        match self {
+            Policy::LAS if !running.is_empty() && !waiting.is_empty() => {
+                let current_attained = running[0].original_size - running[0].rem_size;
+                let next_attained = waiting[0].original_size - waiting[0].rem_size;
+
+                ((next_attained - current_attained) / work_rate).max(0.0)
+            }
+            Policy::LRPT if !running.is_empty() && !waiting.is_empty() => {
+                let current_rem = running[0].rem_size;
+                let next_rem = waiting[0].rem_size;
+
+                ((current_rem - next_rem) / work_rate).max(0.0)
+            }
+            _ => INFINITY,
+        }
+    }
+
+    fn handle_preemption(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>) {
+        if waiting.is_empty() || running.is_empty() {
+            return;
+        }
+
+        match self {
+            Policy::LAS => {
+                let current_attained = running[0].original_size - running[0].rem_size;
+
+                while !waiting.is_empty() {
+                    let next_attained = waiting[0].original_size - waiting[0].rem_size;
+                    if (next_attained - current_attained).abs() <= EPSILON {
+                        running.push(waiting.remove(0));
+                    } else {
+                        break;
+                    }
+                }
+            }
+            Policy::LRPT => {
+                let current_rem = running[0].rem_size;
+
+                while !waiting.is_empty() {
+                    if (waiting[0].rem_size - current_rem).abs() <= EPSILON {
+                        running.push(waiting.remove(0));
+                    } else {
+                        break;
+                    }
+                }
+            }
+            _ => (),
         }
     }
 }
@@ -61,40 +242,42 @@ struct Results {
     total_queue_time: f64,
     num_jobs: usize,
     total_service_time: f64,
+    total_slowdown: f64,
     mean_response_time: f64,
     mean_queue_time: f64,
     mean_service_time: f64,
     mean_number_of_jobs: f64,
+    mean_slowdown: f64,
     total_time: f64,
 }
 
 impl Results {
-    pub fn mean_response_time(&mut self) -> f64 {
+    pub fn mean_response_time(&mut self) {
         self.mean_response_time = self.total_response_time / (self.num_jobs as f64);
-        self.mean_response_time
     }
 
-    pub fn mean_queue_time(&mut self) -> f64 {
+    pub fn mean_queue_time(&mut self) {
         self.mean_queue_time = self.total_queue_time / (self.num_jobs as f64);
-        self.mean_queue_time
     }
 
-    pub fn mean_service_time(&mut self) -> f64 {
+    pub fn mean_service_time(&mut self) {
         self.mean_service_time = self.total_service_time / (self.num_jobs as f64);
-        self.mean_service_time
     }
 
-    pub fn mean_number_of_jobs(&mut self, lambda: f64) -> f64 {
+    pub fn mean_number_of_jobs(&mut self, lambda: f64) {
         // little's law
-        self.mean_number_of_jobs = lambda * self.mean_response_time() as f64;
-        self.mean_number_of_jobs
+        self.mean_number_of_jobs = lambda * self.mean_response_time as f64;
+    }
+
+    pub fn mean_slowdown(&mut self) {
+        self.mean_slowdown = self.total_slowdown / (self.num_jobs as f64);
     }
 
     pub fn update_response_time_histogram(&mut self, response: f64) {
         if let Some(step) = self.step {
             let response_index = (response / step) as usize;
             while self.response_times.len() <= response_index {
-                self.response_times.push(0)
+                self.response_times.push(0);
             }
             self.response_times[response_index] += 1;
         }
@@ -115,7 +298,10 @@ fn simulate(
     let arrival_dist = Exp::new(lambda).unwrap();
     let mut next_arrival = rng.sample(arrival_dist);
     let mut num_completions = 0;
-    let mut queue: Vec<Job> = vec![];
+    let mut num_arrivals = 0;
+    let mut jobs_on_arrival = 0;
+    let mut jobs_waiting: Vec<Job> = vec![];
+    let mut jobs_in_progress: Vec<Job> = vec![];
     let mut results = Results {
         step: config.response_time_histogram,
         response_times: vec![],
@@ -124,9 +310,11 @@ fn simulate(
         num_jobs,
         total_service_time: 0.0,
         mean_response_time: 0.0,
+        total_slowdown: 0.0,
         mean_queue_time: 0.0,
         mean_service_time: 0.0,
         mean_number_of_jobs: 0.0,
+        mean_slowdown: 0.0,
         total_time: 0.0,
     };
 
@@ -135,6 +323,7 @@ fn simulate(
     }
 
     while num_completions < num_jobs {
+        let mut work_rate = policy.work(&mut jobs_in_progress);
         if config.debug {
             println!("time: {time} ");
             println!("next arrival time: {next_arrival}");
@@ -142,29 +331,61 @@ fn simulate(
                 .read_line(&mut String::new())
                 .expect("continued");
         }
-        let next_event_diff =
-            (next_arrival - time).min(queue.first().map_or(INFINITY, |j| j.rem_size)); // pick whichever one will happen next, either the next arrival or the current job is finished
-        let was_arrival = next_event_diff == (next_arrival - time); // if the next event is an arrival make sure to update the flag accordingly
+
+        let mut time_to_completion = INFINITY;
+        for job in &jobs_in_progress {
+            let time_for_this_job = job.rem_size / work_rate;
+
+            if time_for_this_job < time_to_completion {
+                time_to_completion = time_for_this_job;
+            }
+        }
+        let time_to_preemption = policy.time_to_preemption(&jobs_waiting, &jobs_in_progress, work_rate);
+        
+        let next_event_diff = (next_arrival - time).min(time_to_completion).min(time_to_preemption);
+        let was_arrival = next_event_diff == (next_arrival - time);
+        
+        let was_preemption = next_event_diff == time_to_preemption 
+            && !was_arrival 
+            && next_event_diff < time_to_completion;
+        
+
+        let next_event_diff = (next_arrival - time).min(time_to_completion);
+        let was_arrival = next_event_diff == (next_arrival - time); 
         time += next_event_diff;
-        if !queue.is_empty() {
-            let job = queue.first_mut().unwrap();
-            job.rem_size -= next_event_diff;
+        for job in &mut jobs_in_progress {
+            job.rem_size -= next_event_diff * work_rate;
             assert!(job.rem_size >= -EPSILON);
-            if job.rem_size <= EPSILON {
-                let job = queue.remove(0);
+        }
+
+        let mut i = 0;
+        while i < jobs_in_progress.len() {
+            if jobs_in_progress[i].rem_size <= EPSILON {
+                let job = jobs_in_progress.remove(i);
+
                 let response = time - job.arrival_time;
                 let service = job.original_size;
                 let wait_time = response - service;
+                let slowdown = response/service;
 
                 results.total_response_time += response;
                 results.total_service_time += service;
                 results.total_queue_time += wait_time;
+                results.total_slowdown+= slowdown;
 
                 if let Some(step) = config.response_time_histogram {
                     results.update_response_time_histogram(response);
                 }
                 num_completions += 1;
+
+                policy.completion(&mut jobs_waiting, &mut jobs_in_progress);
+            } else {
+                i += 1;
             }
+        }
+
+        if was_preemption {
+            policy.handle_preemption(&mut jobs_waiting, &mut jobs_in_progress);
         }
 
         if was_arrival {
@@ -175,22 +396,16 @@ fn simulate(
                 original_size: size,
             };
             next_arrival = time + arrival_dist.sample(&mut rng);
-            let insertion_index = policy.insertion_index(&queue, &new_job);
-            match policy.insertion_index(&queue, &new_job) {
-                Some(index) => {
-                    queue.insert(index, new_job);
-                }
-                None => {
-                    queue.push(new_job);
-                    policy.reorder(&mut queue);
-                }
-            }
+            num_arrivals += 1;
+            jobs_on_arrival += jobs_waiting.len() + jobs_in_progress.len();
+            policy.arrival(&mut jobs_waiting, &mut jobs_in_progress, new_job);
         }
     }
 
     assert!(results.total_queue_time >= -EPSILON);
     assert!(results.total_response_time >= results.total_service_time - EPSILON);
     results.total_time = time;
+    let mean_number_of_jobs_on_arrival = jobs_on_arrival as f64 / num_arrivals as f64;
     results
 }
 
@@ -231,17 +446,25 @@ impl Dist {
 }
 
 fn main() {
-    let num_jobs = 20;
+    let num_jobs = 100_000_000;
     let rho = 0.4;
-    let seed = 0;
+    let seed = 10;
     let dist = Dist::Hyperexponential(0.5, 3.0, 0.8);
-    let policies = vec![Policy::FCFS, Policy::PLCFS];
+    let policies = vec![Policy::LCFS];
+
+    /*
     let mut inputOption = String::new();
     std::io::stdin()
         .read_line(&mut inputOption)
         .expect("could not read line");
 
-    let choice = inputOption.trim().parse().unwrap_or(0);
+    let choice = inputOption.trim().parse().unwrap_or(0);*/
+
+    let choice = std::env::args()
+        .nth(1)
+        .unwrap_or("0".to_string())
+        .parse()
+        .unwrap_or(0);
 
     let config = match choice {
         1 => Config {
@@ -290,6 +513,7 @@ fn main() {
                     .join(";")
             );
         }
+        println!("{}", results.mean_response_time);
     }
 }
 
