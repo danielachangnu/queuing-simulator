@@ -74,9 +74,9 @@ fn test_system_littles_law2() {
 mod tests {
     use super::*;
 
-    const seed: u64 = 42; 
+    const seed: u64 = 42;
     const job_size: usize = 150_000;
-    const TOLERANCE: f64 = 0.05; 
+    const TOLERANCE: f64 = 0.05;
 
     fn test_config() -> Config {
         Config {
@@ -84,11 +84,11 @@ mod tests {
             response_time_histogram: None,
         }
     }
-    
+
     fn run_sim(lambda: f64, dist: Dist, policy: Policy) -> f64 {
         let mut results = simulate(lambda, dist, policy, job_size, seed, &test_config());
         results.mean_response_time(); // Update the field
-        results.mean_response_time    // Return the field's value
+        results.mean_response_time // Return the field's value
     }
 
     #[test]
@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn test_mg1_hyperexponential() {
-        let lambda = 0.5; 
+        let lambda = 0.5;
         let dist = Dist::Hyperexponential(0.5, 3.0, 0.8);
 
         let fcfs = run_sim(lambda, dist, Policy::FCFS);
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn test_mg1_uniform_low_variance() {
-        let lambda = 0.5; 
+        let lambda = 0.5;
         let dist = Dist::Uniform(0.0, 2.0);
 
         let fcfs = run_sim(lambda, dist, Policy::FCFS);
@@ -157,42 +157,38 @@ mod tests {
     }
 
     #[test]
-    fn test_ps_slowdown() {        
+    fn test_ps_slowdown() {
         let lambda = 0.5;
         let e_s = 1.0;
         let rho = lambda * e_s;
-        
+
         let dist = Dist::Hyperexponential(0.5, 3.0, 0.8);
         let mut results = simulate(lambda, dist, Policy::PS, job_size, seed, &test_config());
-        
+
         // Update then access field
         results.mean_slowdown();
         let sim_slowdown = results.mean_slowdown;
-        
-        let expected_slowdown = 1.0 / (1.0 - rho); 
-        
-        assert!(
-            (sim_slowdown - expected_slowdown).abs() < TOLERANCE
-        );
+
+        let expected_slowdown = 1.0 / (1.0 - rho);
+
+        assert!((sim_slowdown - expected_slowdown).abs() < TOLERANCE);
     }
 
     #[test]
     fn test_plcfs_slowdown() {
         let lambda = 0.5;
         let e_s = 1.0;
-        let rho = lambda * e_s; 
-        
+        let rho = lambda * e_s;
+
         let dist = Dist::Exponential(e_s);
         let mut results = simulate(lambda, dist, Policy::PLCFS, job_size, seed, &test_config());
-        
+
         // Update then access field
         results.mean_slowdown();
         let sim_slowdown = results.mean_slowdown;
-        
+
         let expected_slowdown = 1.0 / (1.0 - rho);
-        
-        assert!(
-            (sim_slowdown - expected_slowdown).abs() < TOLERANCE
-        );
+
+        assert!((sim_slowdown - expected_slowdown).abs() < TOLERANCE);
     }
 }

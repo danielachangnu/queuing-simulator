@@ -10,9 +10,11 @@ struct Job {
     rem_size: f64,
     arrival_time: f64,
     original_size: f64,
+    nudged: bool,
 }
 struct Config {
     response_time_histogram: Option<f64>,
+    nudge: Option<f64>,
     debug: bool,
 }
 
@@ -26,6 +28,7 @@ enum Policy {
     PS,
     LAS,
     LRPT,
+    Nudge,
 }
 impl Policy {
     fn work(&self, running: &mut Vec<Job>) -> f64 {
@@ -48,7 +51,13 @@ impl Policy {
         }
     }
 
-    fn arrival(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, new_job: Job) {
+    fn arrival(
+        &self,
+        waiting: &mut Vec<Job>,
+        running: &mut Vec<Job>,
+        new_job: Job,
+        config: &Config,
+    ) {
         match self {
             Policy::FCFS => {
                 if running.is_empty() {
@@ -110,9 +119,10 @@ impl Policy {
                     let current_attained = running[0].original_size - running[0].rem_size;
                     let new_attained = 0.0;
                     if new_attained < current_attained {
-                        waiting.append(running);
+                        waiting.append(running); // running is always smaller than waiting, so just append to front of waiting and don't sort at the end
                         running.push(new_job);
                         waiting.sort_by_key(|job| n64(job.original_size - job.rem_size));
+                    // waiting sorted in age order, and running is always smaller than or equal to the smallest thing in waiting
                     } else {
                         running.push(new_job);
                     }
@@ -125,14 +135,38 @@ impl Policy {
                 } else {
                     let current_rem = running[0].rem_size;
                     if new_job.rem_size > current_rem {
-                        waiting.append(running);
+                        waiting.append(running); // these should be at the front of waiting
                         running.push(new_job);
-                        waiting.sort_by_key(|job| -n64(job.rem_size));
+                        waiting.sort_by_key(|job| -n64(job.rem_size)); // don't need to sort
                     } else if new_job.rem_size == current_rem {
+                        // almost never triggers lol
                         running.push(new_job);
                     } else {
                         waiting.push(new_job);
                         waiting.sort_by_key(|job| -n64(job.rem_size));
+                    }
+                }
+            }
+
+            Policy::Nudge => {
+                if running.is_empty() {
+                    running.push(new_job);
+                } else {
+                    let threshold = config.nudge.unwrap();
+
+                    if new_job.original_size < threshold {
+                        if let Some(back_job) = waiting.last_mut() {
+                            if back_job.original_size >= threshold && !back_job.nudged {
+                                back_job.nudged = true;
+                                waiting.insert(waiting.len() - 1, new_job);
+                            } else {
+                                waiting.push(new_job);
+                            }
+                        } else {
+                            waiting.push(new_job);
+                        }
+                    } else {
+                        waiting.push(new_job);
                     }
                 }
             }
@@ -340,18 +374,20 @@ fn simulate(
                 time_to_completion = time_for_this_job;
             }
         }
-        let time_to_preemption = policy.time_to_preemption(&jobs_waiting, &jobs_in_progress, work_rate);
-        
-        let next_event_diff = (next_arrival - time).min(time_to_completion).min(time_to_preemption);
+        let time_to_preemption =
+            policy.time_to_preemption(&jobs_waiting, &jobs_in_progress, work_rate);
+
+        let next_event_diff = (next_arrival - time)
+            .min(time_to_completion)
+            .min(time_to_preemption);
         let was_arrival = next_event_diff == (next_arrival - time);
-        
-        let was_preemption = next_event_diff == time_to_preemption 
-            && !was_arrival 
+
+        let was_preemption = next_event_diff == time_to_preemption
+            && !was_arrival
             && next_event_diff < time_to_completion;
-        
 
         let next_event_diff = (next_arrival - time).min(time_to_completion);
-        let was_arrival = next_event_diff == (next_arrival - time); 
+        let was_arrival = next_event_diff == (next_arrival - time);
         time += next_event_diff;
         for job in &mut jobs_in_progress {
             job.rem_size -= next_event_diff * work_rate;
@@ -366,12 +402,12 @@ fn simulate(
                 let response = time - job.arrival_time;
                 let service = job.original_size;
                 let wait_time = response - service;
-                let slowdown = response/service;
+                let slowdown = response / service;
 
                 results.total_response_time += response;
                 results.total_service_time += service;
                 results.total_queue_time += wait_time;
-                results.total_slowdown+= slowdown;
+                results.total_slowdown += slowdown;
 
                 if let Some(step) = config.response_time_histogram {
                     results.update_response_time_histogram(response);
@@ -394,11 +430,12 @@ fn simulate(
                 rem_size: size,
                 arrival_time: time,
                 original_size: size,
+                nudged: false,
             };
             next_arrival = time + arrival_dist.sample(&mut rng);
             num_arrivals += 1;
             jobs_on_arrival += jobs_waiting.len() + jobs_in_progress.len();
-            policy.arrival(&mut jobs_waiting, &mut jobs_in_progress, new_job);
+            policy.arrival(&mut jobs_waiting, &mut jobs_in_progress, new_job, &config);
         }
     }
 
@@ -406,6 +443,7 @@ fn simulate(
     assert!(results.total_response_time >= results.total_service_time - EPSILON);
     results.total_time = time;
     let mean_number_of_jobs_on_arrival = jobs_on_arrival as f64 / num_arrivals as f64;
+    results.mean_response_time();
     results
 }
 
@@ -450,7 +488,7 @@ fn main() {
     let rho = 0.4;
     let seed = 10;
     let dist = Dist::Hyperexponential(0.5, 3.0, 0.8);
-    let policies = vec![Policy::LCFS];
+    let policies = vec![Policy::FCFS, Policy::LAS, Policy::LRPT];
 
     /*
     let mut inputOption = String::new();
@@ -470,18 +508,22 @@ fn main() {
         1 => Config {
             debug: false,
             response_time_histogram: Some(0.0001),
+            nudge: Some(0.1),
         },
         2 => Config {
             debug: true,
             response_time_histogram: None,
+            nudge: Some(0.1),
         },
         3 => Config {
             debug: true,
             response_time_histogram: Some(0.0001),
+            nudge: Some(0.1),
         },
         _ => Config {
             debug: false,
             response_time_histogram: None,
+            nudge: Some(0.1),
         },
     };
 
