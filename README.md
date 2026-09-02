@@ -35,7 +35,7 @@ Once you set the parameters, you need to choose an output mode with an argument 
 For example,
 
 ```rust
-cargo run --release -- 1
+cargo run --release 1
 ```
 
 would run the simulation with the debug configuration off and the response time histogram on.
