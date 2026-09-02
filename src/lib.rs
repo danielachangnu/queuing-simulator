@@ -1,3 +1,4 @@
+pub mod timing;
 use noisy_float::prelude::*;
 use rand::prelude::*;
 use rand_distr::{Beta, ChiSquared, Exp, InverseGaussian, Normal, Pareto};
@@ -10,8 +11,8 @@ pub struct Job {
     rem_size: f64,
     arrival_time: f64,
     original_size: f64,
-    nudged: bool,
 }
+
 pub struct Config {
     pub response_time_histogram: Option<f64>,
     pub debug: bool,
@@ -27,23 +28,23 @@ pub enum Policy {
     PS,
     LAS,
     LRPT,
-    Nudge(f64),
+    Nudge(f64, bool),
     GammaB(f64),
     AccumulatingPriority,
 }
 
 pub trait GenericPolicy {
-    fn work(&self, running: &mut Vec<Job>) -> f64;
-    fn arrival(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, new_job: Job);
-    fn completion(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, time: f64);
+    fn work(&mut self, running: &mut Vec<Job>) -> f64;
+    fn arrival(&mut self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, new_job: Job);
+    fn completion(&mut self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, time: f64);
     fn time_to_preemption(
-        &self,
+        &mut self,
         waiting: &[Job],
         running: &[Job],
         work_rate: f64,
         time: f64,
     ) -> f64;
-    fn handle_preemption(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, time: f64);
+    fn handle_preemption(&mut self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, time: f64);
 }
 
 pub trait IndexPolicy {
@@ -51,21 +52,21 @@ pub trait IndexPolicy {
 }
 
 impl<I: IndexPolicy> GenericPolicy for I {
-    fn work(&self, running: &mut Vec<Job>) -> f64 { todo!() }
-    fn arrival(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, new_job: Job) { todo!( )}
-    fn completion(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, time: f64) { todo!() }
+    fn work(&mut self, running: &mut Vec<Job>) -> f64 { todo!() }
+    fn arrival(&mut self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, new_job: Job) { todo!() }
+    fn completion(&mut self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, time: f64) { todo!() }
     fn time_to_preemption(
-        &self,
+        &mut self,
         waiting: &[Job],
         running: &[Job],
         work_rate: f64,
         time: f64,
-    ) -> f64 { todo!()}
-    fn handle_preemption(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, time: f64) { todo!()}
+    ) -> f64 { todo!() }
+    fn handle_preemption(&mut self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, time: f64) { todo!() }
 }
 
 impl GenericPolicy for Policy {
-    fn work(&self, running: &mut Vec<Job>) -> f64 {
+    fn work(&mut self, running: &mut Vec<Job>) -> f64 {
         match self {
             Policy::PS | Policy::LRPT | Policy::LAS => {
                 if running.is_empty() {
@@ -74,7 +75,6 @@ impl GenericPolicy for Policy {
                     1.0 / running.len() as f64
                 }
             }
-
             _ => {
                 if running.is_empty() {
                     0.0
@@ -85,7 +85,7 @@ impl GenericPolicy for Policy {
         }
     }
 
-    fn arrival(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, new_job: Job) {
+    fn arrival(&mut self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, new_job: Job) {
         match self {
             Policy::FCFS => {
                 if running.is_empty() {
@@ -147,10 +147,9 @@ impl GenericPolicy for Policy {
                     let current_attained = running[0].original_size - running[0].rem_size;
                     let new_attained = 0.0;
                     if new_attained < current_attained {
-                        waiting.append(running); // running is always smaller than waiting, so just append to front of waiting and don't sort at the end
+                        waiting.append(running);
                         running.push(new_job);
                         waiting.sort_by_key(|job| n64(job.original_size - job.rem_size));
-                    // waiting sorted in age order, and running is always smaller than or equal to the smallest thing in waiting
                     } else {
                         running.push(new_job);
                     }
@@ -163,11 +162,10 @@ impl GenericPolicy for Policy {
                 } else {
                     let current_rem = running[0].rem_size;
                     if new_job.rem_size > current_rem {
-                        waiting.append(running); // these should be at the front of waiting
+                        waiting.append(running);
                         running.push(new_job);
-                        waiting.sort_by_key(|job| -n64(job.rem_size)); // don't need to sort
+                        waiting.sort_by_key(|job| -n64(job.rem_size));
                     } else if new_job.rem_size == current_rem {
-                        // almost never triggers lol
                         running.push(new_job);
                     } else {
                         waiting.push(new_job);
@@ -176,15 +174,19 @@ impl GenericPolicy for Policy {
                 }
             }
 
-            Policy::Nudge(threshold) => {
+            Policy::Nudge(threshold, just_swapped) => {
                 if running.is_empty() {
                     running.push(new_job);
                 } else {
-                    if new_job.original_size < *threshold {
-                        if let Some(back_job) = waiting.last_mut() {
-                            if back_job.original_size >= *threshold && !back_job.nudged {
-                                back_job.nudged = true;
-                                waiting.insert(waiting.len() - 1, new_job);
+                    if !*just_swapped {
+                        if new_job.original_size < *threshold {
+                            if let Some(back_job) = waiting.last() {
+                                if back_job.original_size >= *threshold {
+                                    *just_swapped = true;
+                                    waiting.insert(waiting.len() - 1, new_job);
+                                } else {
+                                    waiting.push(new_job);
+                                }
                             } else {
                                 waiting.push(new_job);
                             }
@@ -192,6 +194,7 @@ impl GenericPolicy for Policy {
                             waiting.push(new_job);
                         }
                     } else {
+                        *just_swapped = false;
                         waiting.push(new_job);
                     }
                 }
@@ -204,11 +207,8 @@ impl GenericPolicy for Policy {
                     waiting.push(new_job);
                     waiting.sort_by_key(|job| {
                         let s = job.original_size;
-
-                        let boost = (1.0 / gamma) * (1.0 / (1.0 - (-gamma * s).exp())).ln();
-
+                        let boost = (1.0 / *gamma) * (1.0 / (1.0 - (-*gamma * s).exp())).ln();
                         let virtual_arrival_time = job.arrival_time - boost;
-
                         n64(virtual_arrival_time)
                     });
                 }
@@ -224,7 +224,7 @@ impl GenericPolicy for Policy {
         }
     }
 
-    fn completion(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, time: f64) {
+    fn completion(&mut self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, time: f64) {
         match self {
             Policy::PS => (),
             Policy::LAS => {
@@ -281,6 +281,15 @@ impl GenericPolicy for Policy {
                 }
             }
 
+            Policy::Nudge(_, just_swapped) => {
+                if !waiting.is_empty() {
+                    running.push(waiting.remove(0));
+                }
+                if waiting.is_empty() {
+                    *just_swapped = false;
+                }
+            }
+
             _ => {
                 if !waiting.is_empty() {
                     running.push(waiting.remove(0));
@@ -290,7 +299,7 @@ impl GenericPolicy for Policy {
     }
 
     fn time_to_preemption(
-        &self,
+        &mut self,
         waiting: &[Job],
         running: &[Job],
         work_rate: f64,
@@ -318,7 +327,6 @@ impl GenericPolicy for Policy {
 
                 for job in waiting {
                     if job.original_size < curr_job.original_size {
-                        // jobs only overtake if this condition holds
                         let job_priority = (time - job.arrival_time) / job.original_size;
                         let net_closing_speed =
                             1.0 / job.original_size - 1.0 / curr_job.original_size;
@@ -336,7 +344,7 @@ impl GenericPolicy for Policy {
         }
     }
 
-    fn handle_preemption(&self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, time: f64) {
+    fn handle_preemption(&mut self, waiting: &mut Vec<Job>, running: &mut Vec<Job>, time: f64) {
         if waiting.is_empty() || running.is_empty() {
             return;
         }
@@ -424,7 +432,6 @@ impl Results {
     }
 
     pub fn mean_number_of_jobs(&mut self, lambda: f64) {
-        // little's law
         self.mean_number_of_jobs = lambda * self.mean_response_time as f64;
     }
 
@@ -446,14 +453,14 @@ impl Results {
 pub fn simulate<P: GenericPolicy>(
     lambda: f64,
     dist: Dist,
-    policy: P, // shouldn't be mutable for now
+    mut policy: P, 
     num_jobs: usize,
     seed: u64,
     config: &Config,
 ) -> Results {
-    assert!((dist.mean() - 1.0).abs() < EPSILON); // mean = lambda is like the load, so if the mean is around 1 its accurate. if not, its not accurate
+    assert!((dist.mean() - 1.0).abs() < EPSILON); 
     let mut rng = StdRng::seed_from_u64(seed);
-    let mut time = 0.0; // easy way to track response time
+    let mut time = 0.0; 
     let arrival_dist = Exp::new(lambda).unwrap();
     let mut next_arrival = rng.sample(arrival_dist);
     let mut num_completions = 0;
@@ -553,7 +560,6 @@ pub fn simulate<P: GenericPolicy>(
                 rem_size: size,
                 arrival_time: time,
                 original_size: size,
-                nudged: false,
             };
             next_arrival = time + arrival_dist.sample(&mut rng);
             num_arrivals += 1;
@@ -565,7 +571,7 @@ pub fn simulate<P: GenericPolicy>(
     assert!(results.total_queue_time >= -EPSILON);
     assert!(results.total_response_time >= results.total_service_time - EPSILON);
     results.total_time = time;
-    let mean_number_of_jobs_on_arrival = jobs_on_arrival as f64 / num_arrivals as f64;
+    let _mean_number_of_jobs_on_arrival = jobs_on_arrival as f64 / num_arrivals as f64;
     results.mean_response_time();
     results
 }
